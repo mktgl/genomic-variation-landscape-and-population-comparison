@@ -21,7 +21,7 @@ def plot_variant_density(df, window_size=100_000, chrom=None, save=False, output
     density = data.groupby("window").size().reset_index(name="variant_count")
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    # Convert window base pairs to Megabases (Mb) for a cleaner X-axis
+   
     ax.bar(density["window"] / 1e6, density["variant_count"], width=(window_size / 1e6) * 0.8)
 
     ax.set_xlabel("Genomic Window Start (Mb)")
@@ -34,7 +34,7 @@ def plot_variant_density(df, window_size=100_000, chrom=None, save=False, output
         plt.show()
 
 def plot_af_violin(df, save=False, output_dir="outputs/figures"):
-    # Melt the wide DataFrame into a long format for Seaborn
+
     pop_cols = ['af_afr', 'af_eur', 'af_eas', 'af_amr', 'af_sas']
     pop_labels = {
         'af_afr': 'African', 'af_eur': 'European', 
@@ -64,7 +64,6 @@ def plot_af_violin(df, save=False, output_dir="outputs/figures"):
 
 def plot_variant_heatmap(df, region_size=1_000_000, save=False, output_dir="outputs/figures"):
     data = df.copy()
-    # Create 1 Megabase (1Mb) regions to avoid plotting thousands of tiny windows
     data["region_Mb"] = (data["pos"] // region_size) * region_size / 1e6 
     
     heatmap_data = pd.pivot_table(
@@ -88,7 +87,6 @@ def plot_variant_heatmap(df, region_size=1_000_000, save=False, output_dir="outp
         plt.show()
 
 def plot_af_scatter(df, pop1="EUR", pop2="AFR", save=False, output_dir="outputs/figures"):
-    # Map friendly names like "EUR" to column names like "af_eur"
     col1 = f"af_{pop1.lower()}" if not pop1.lower().startswith("af_") else pop1.lower()
     col2 = f"af_{pop2.lower()}" if not pop2.lower().startswith("af_") else pop2.lower()
 
