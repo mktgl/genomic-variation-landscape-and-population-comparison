@@ -5,18 +5,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-# -------------------------------
-# Utility: Save figure
-# -------------------------------
 def save_figure(fig, output_path, filename):
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path / filename, bbox_inches="tight")
     plt.close(fig)
 
-# -------------------------------
-# 1. Variant Density Plot
-# -------------------------------
 def plot_variant_density(df, window_size=100_000, chrom=None, save=False, output_dir="outputs/figures"):
     data = df.copy()
 
@@ -39,9 +33,6 @@ def plot_variant_density(df, window_size=100_000, chrom=None, save=False, output
     else:
         plt.show()
 
-# -------------------------------
-# 2. Violin Plot (AF distribution)
-# -------------------------------
 def plot_af_violin(df, save=False, output_dir="outputs/figures"):
     # Melt the wide DataFrame into a long format for Seaborn
     pop_cols = ['af_afr', 'af_eur', 'af_eas', 'af_amr', 'af_sas']
@@ -71,9 +62,6 @@ def plot_af_violin(df, save=False, output_dir="outputs/figures"):
     else:
         plt.show()
 
-# -------------------------------
-# 3. Heatmap (Variant type vs region)
-# -------------------------------
 def plot_variant_heatmap(df, region_size=1_000_000, save=False, output_dir="outputs/figures"):
     data = df.copy()
     # Create 1 Megabase (1Mb) regions to avoid plotting thousands of tiny windows
@@ -99,9 +87,6 @@ def plot_variant_heatmap(df, region_size=1_000_000, save=False, output_dir="outp
     else:
         plt.show()
 
-# -------------------------------
-# 4. Scatter Plot (AF comparison)
-# -------------------------------
 def plot_af_scatter(df, pop1="EUR", pop2="AFR", save=False, output_dir="outputs/figures"):
     # Map friendly names like "EUR" to column names like "af_eur"
     col1 = f"af_{pop1.lower()}" if not pop1.lower().startswith("af_") else pop1.lower()
@@ -116,7 +101,6 @@ def plot_af_scatter(df, pop1="EUR", pop2="AFR", save=False, output_dir="outputs/
     ax.set_ylabel(f"Allele Frequency ({pop2})")
     ax.set_title(f"AF Comparison: {pop1} vs {pop2}")
 
-    # Plot a y=x reference line
     min_val = min(plot_df[col1].min(), plot_df[col2].min())
     max_val = max(plot_df[col1].max(), plot_df[col2].max())
     if pd.notna(min_val) and pd.notna(max_val):
