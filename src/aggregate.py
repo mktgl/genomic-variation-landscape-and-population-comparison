@@ -1,3 +1,9 @@
+# src/aggregate.py
+# ─────────────────────────────────────────────────────────────
+# PURPOSE: Functions to summarise variants by genomic window and population
+# Used by: notebooks/03_aggregation.ipynb
+# ─────────────────────────────────────────────────────────────
+
 import pandas as pd
 
 
