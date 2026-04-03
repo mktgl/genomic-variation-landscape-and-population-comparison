@@ -1,71 +1,124 @@
-the interactive web dashboard for the project
-
-# ─────────────────────────────────────────────────────────────
-# PURPOSE: Interactive web dashboard built with Streamlit
-# Run with: streamlit run dashboard/app.py
-#
-# This is the FINAL product of the project — an interactive
-# webpage where anyone can explore the chrY variant data
-# without writing any code.
-# ─────────────────────────────────────────────────────────────
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import sys
 import os
 
-st.set_page_config(page_title='Genomic Variant Dashboard', layout='wide')
+# ====================== PATH SETUP ======================
+sys.path.insert(0, os.path.abspath('..'))   # So we can import from src/
 
-st.title('🧬 Genomic Variant Landscape — chrY (gnomAD v4.1)')
-st.markdown('Explore variant density and population allele frequencies along the human Y chromosome.')
+from src.ingest import parse_vcf_to_dataframe
+from src.filter import full_filter_pipeline
+from src.aggregate import compute_window_density, melt_population_af
 
-# ── LOAD DATA ──────────────────────────────────────────────────
-@st.cache_data
-def load_data():
-    base = os.path.join(os.path.dirname(__file__), '..', 'data', 'processed')
-    window_df = pd.read_parquet(os.path.join(base, 'window_density.parquet'))
-    pop_df    = pd.read_parquet(os.path.join(base, 'population_af.parquet'))
-    df        = pd.read_parquet(os.path.join(base, 'chrY_filtered.parquet'))
-    return window_df, pop_df, df
+# ====================== PAGE CONFIG ======================
+st.set_page_config(page_title="Genomic Variant Dashboard", layout="wide")
+st.title("🧬 Genomic Variant Landscape & Population Comparison")
+st.markdown("**Live analysis** using your `src/` modules | chrY gnomAD v4.1")
 
-try:
-    window_df, pop_df, df = load_data()
-    data_loaded = True
-except FileNotFoundError:
-    st.warning('⚠️  Processed data not found. Please run notebooks 01–03 first.')
-    data_loaded = False
+# ====================== SIDEBAR ======================
+st.sidebar.header("🎛️ Controls")
 
-if data_loaded:
-    # ── SIDEBAR FILTERS ────────────────────────────────────────
-    st.sidebar.header('Filters')
-    maf_min = st.sidebar.slider('Minimum Allele Frequency (MAF)', 0.0, 1.0, 0.001, 0.001)
-    vtype   = st.sidebar.multiselect('Variant Type', ['SNP', 'INDEL'], default=['SNP', 'INDEL'])
+uploaded_file = st.sidebar.file_uploader(
+    "Upload VCF file (.vcf or .vcf.gz)", 
+    type=["vcf", "vcf.gz"]
+)
 
-    filtered = df[(df['af_global'] >= maf_min) & (df['variant_type'].isin(vtype))]
-    st.sidebar.metric('Variants shown', f'{len(filtered):,}')
+max_rows = st.sidebar.slider("Max variants to load (for speed)", 
+                             min_value=500, max_value=20000, value=5000, step=500)
 
-    # ── CHART 1: Density ───────────────────────────────────────
-    st.subheader('📍 Variant Density Along chrY')
-    fig1 = px.bar(window_df, x=window_df['window']/1e6, y='variant_count',
-                  labels={'x': 'Genomic Position (Mb)', 'variant_count': 'Variants per 100kb'},
-                  color='mean_af', color_continuous_scale='Blues')
-    st.plotly_chart(fig1, use_container_width=True)
+min_maf = st.sidebar.slider("Minimum Global MAF", 
+                            min_value=0.0, max_value=0.1, value=0.001, step=0.0001)
 
-    # ── CHART 2: Population AF ─────────────────────────────────
-    st.subheader('🌍 Allele Frequency by Population')
-    fig2 = px.violin(pop_df, x='population', y='allele_frequency', box=True,
-                     color='population',
-                     labels={'allele_frequency': 'Allele Frequency', 'population': 'Population'})
+variant_types = st.sidebar.multiselect(
+    "Variant Type", 
+    options=["SNP", "INDEL"], 
+    default=["SNP", "INDEL"]
+)
+
+# ====================== MAIN DASHBOARD ======================
+if uploaded_file is None:
+    st.info("👆 Upload a VCF file to start analysis.")
+    st.stop()
+
+# Save uploaded file temporarily
+temp_path = "temp_uploaded.vcf"
+with open(temp_path, "wb") as f:
+    f.write(uploaded_file.getbuffer())
+
+# ------------------- Ingest -------------------
+with st.spinner("Parsing VCF file..."):
+    df_raw = parse_vcf_to_dataframe(temp_path, max_rows=max_rows)
+
+st.success(f"✅ Loaded **{len(df_raw):,}** variants from VCF")
+
+# ------------------- Filter -------------------
+with st.spinner("Applying filters..."):
+    df_filtered = full_filter_pipeline(df_raw, min_maf=min_maf)
+
+# Additional variant type filter
+df_filtered = df_filtered[df_filtered['variant_type'].isin(variant_types)]
+
+st.metric("Variants after filtering", f"{len(df_filtered):,}")
+
+if df_filtered.empty:
+    st.error("No variants remaining after filtering. Try lowering MAF or removing variant type filter.")
+    st.stop()
+
+# ------------------- Tabs -------------------
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Overview", 
+    "🌍 Population Allele Frequency", 
+    "🪟 Window Density", 
+    "📋 Raw Data"
+])
+
+with tab1:
+    st.subheader("Summary Statistics")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Raw", len(df_raw))
+    col2.metric("After Filter", len(df_filtered))
+    col3.metric("SNP %", f"{(df_filtered['variant_type']=='SNP').mean()*100:.1f}%")
+    col4.metric("Mean AF", f"{df_filtered['af_global'].mean():.4f}")
+
+    st.dataframe(df_filtered.head(10), use_container_width=True)
+
+with tab2:
+    st.subheader("Allele Frequency Distribution by Population")
+    melted = melt_population_af(df_filtered)
+    
+    fig = px.violin(melted, x='population', y='allele_frequency', 
+                    color='population', box=True, points="outliers",
+                    title="Population-wise Allele Frequency")
+    st.plotly_chart(fig, use_container_width=True)
+
+    # AFR vs EUR scatter
+    st.subheader("African vs European AF Comparison")
+    scatter = df_filtered[['af_afr', 'af_eur', 'variant_type']].dropna()
+    fig2 = px.scatter(scatter, x='af_afr', y='af_eur', color='variant_type',
+                      opacity=0.5, title="AF African vs European")
     st.plotly_chart(fig2, use_container_width=True)
 
-    # ── CHART 3: AFR vs EUR ────────────────────────────────────
-    st.subheader('🔬 Population Comparison: AFR vs EUR')
-    scatter_df = filtered[['af_afr', 'af_eur', 'variant_type']].dropna()
-    fig3 = px.scatter(scatter_df, x='af_afr', y='af_eur', color='variant_type',
-                      opacity=0.4,
-                      labels={'af_afr': 'AF (African)', 'af_eur': 'AF (European)'})
+with tab3:
+    st.subheader("Variant Density by Genomic Window (100kb)")
+    agg_df = compute_window_density(df_filtered, window_size=100_000)
+    
+    fig3 = px.bar(agg_df, x=agg_df['window']/1_000_000, y='variant_count',
+                  color='mean_af', color_continuous_scale='Blues',
+                  labels={'x': 'Position on chrY (Mb)', 'variant_count': 'Number of Variants'})
     st.plotly_chart(fig3, use_container_width=True)
+    
+    st.dataframe(agg_df.head(15), use_container_width=True)
 
-    # ── RAW TABLE ──────────────────────────────────────────────
-    with st.expander('View raw data table'):
-        st.dataframe(filtered.head(200))
+with tab4:
+    st.subheader("Filtered Variants Table")
+    st.dataframe(df_filtered, use_container_width=True)
+
+# Download button
+csv = df_filtered.to_csv(index=False).encode()
+st.download_button("📥 Download Filtered Data as CSV", 
+                   csv, "filtered_variants.csv", "text/csv")
+
+# Cleanup temp file
+if os.path.exists(temp_path):
+    os.remove(temp_path)
