@@ -1,4 +1,8 @@
 # tests/test_aggregate.py
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import pytest
 import pandas as pd
 from src.aggregate import compute_window_density, melt_population_af
